@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- ダブルタップズームやピンチズーム防止 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>簡易 太鼓の達人 Web (ドンカツ分離＆不可範囲調整版)</title>
+  <style>
+    @font-face {
+      font-family: 'OedoKanteiryu';
+      src: url('FOT-大江戸勘亭流 Std E.otf') format('opentype');
+    }
+
+    body {
+      margin: 0;
+      background-color: #222;
+      color: #fff;
+      font-family: 'OedoKanteiryu', sans-serif;
+      text-align: center;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    #setup-panel, #result-panel {
+      padding: 20px;
+      background: #333;
+      width: 600px;
+      max-width: 90%;
+      margin: 20px auto;
+      border-radius: 8px;
+      box-sizing: border-box;
+      display: block;
+    }
+    #result-panel {
+      display: none;
+      text-align: left;
+    }
+    .file-input {
+      margin: 8px 0;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .file-input label {
+      font-size: 14px;
+      font-family: 'OedoKanteiryu', sans-serif;
+    }
+    select, input, button {
+      font-family: 'OedoKanteiryu', sans-serif;
+    }
+
+    #game-container {
+      position: relative;
+      width: 800px;
+      margin: 0 auto;
+      overflow: visible;
+      display: none;
+    }
+
+    #top-hud {
+      position: relative;
+      width: 800px;
+      height: 160px;
+    }
+
+    /* ドンちゃん：200%の大きさ */
+    #don-character {
+      position: absolute;
+      left: -20px;
+      bottom: 5px;
+      width: 320px;
+      height: 320px;
+      z-index: 5;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center bottom;
+      pointer-events: none;
+    }
+
+    /* ミニ太鼓とコンボ数表示 (left:100px, bottom:-85px) */
+    #mini-taiko-hud {
+      position: absolute;
+      left: 100px;
+      bottom: -85px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    #mini-taiko-container {
+      position: relative;
+      width: 65px;
+      height: 75px;
+    }
+
+    #mini-taiko-base {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('taiko/taiko_base.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      z-index: 1;
+    }
+
+    .mini-glow {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      opacity: 0;
+      transition: opacity 0.12s ease-out;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #glow-don-left, #glow-don-right { background-image: url('taiko/don_glow.png'); }
+    #glow-ka-left, #glow-ka-right { background-image: url('taiko/ka_glow.png'); }
+
+    .glow-left { clip-path: inset(0 50% 0 0); }
+    .glow-right { clip-path: inset(0 0 0 50%); }
+
+    .glow-active { opacity: 1 !important; }
+
+    #combo-hud {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1;
+    }
+    #combo-number {
+      font-size: 36px;
+      font-weight: bold;
+      font-style: italic;
+      text-shadow: 
+        1px 1px 0 #000, -1px -1px 0 #000, 
+        1px -1px 0 #000, -1px 1px 0 #000,
+        2px 2px 0px rgba(0,0,0,0.8);
+      color: #ffffff;
+    }
+    #combo-label {
+      font-size: 13px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 1px 1px 0 #000;
+      margin-top: 2px;
+    }
+
+    .combo-silver {
+      color: #e2e8f0 !important;
+      text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 6px #94a3b8, 2px 2px 0px rgba(0,0,0,0.9) !important;
+    }
+    .combo-gold {
+      color: #fde047 !important;
+      text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 6px #f59e0b, 2px 2px 0px rgba(0,0,0,0.9) !important;
+    }
+
+    /* ドンちゃんの下部分にあるスコア表示 */
+    #score-hud {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      z-index: 10;
+    }
+    #score-label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 1px 1px 0 #000;
+      margin-bottom: 0px;
+    }
+    #score-number {
+      font-size: 32px;
+      font-weight: bold;
+      font-style: italic;
+      color: #ffd700;
+      text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 2px 2px 0px rgba(0,0,0,0.9);
+    }
+
+    /* 右上の曲名タイトル表示 */
+    #title-hud {
+      position: absolute;
+      right: 15px;
+      top: 15px;
+      max-width: 380px;
+      text-align: right;
+      z-index: 10;
+    }
+    #song-title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 
+        2px 2px 0 #000, -2px -2px 0 #000, 
+        2px -2px 0 #000, -2px 2px 0 #000,
+        0 0 8px rgba(0,0,0,0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #gauge-container {
+      position: absolute;
+      right: 0px;
+      bottom: 10px;
+      width: 240px;
+      height: 26px;
+      background-color: #444;
+      border: 3px solid #fff;
+      border-radius: 13px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      box-sizing: border-box;
+      z-index: 5;
+    }
+    #gauge-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(to right, #ff4747, #ffaa00, #ff4747);
+      transition: width 0.1s linear;
+    }
+    #gauge-text {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      font-weight: bold;
+      font-size: 14px;
+      text-shadow: 1px 1px 0 #000;
+      font-family: 'OedoKanteiryu', sans-serif;
+    }
+
+    #lane {
+      position: relative;
+      width: 800px;
+      height: 100px;
+      background-color: #444;
+      border-top: 4px solid #fff;
+      border-bottom: 4px solid #fff;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    /* 判定枠 137%サイズ */
+    #judge-mark {
+      position: absolute;
+      left: 230px;
+      top: 2px;
+      width: 96px;
+      height: 96px;
+      background-image: url('gameillust/Hantei.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      box-sizing: border-box;
+      z-index: 2;
+    }
+
+    #judge-container {
+      position: absolute;
+      left: 230px;
+      top: 135px;
+      width: 140px;
+      height: 40px;
+      margin-left: -35px;
+      z-index: 100;
+      pointer-events: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .judge-popup {
+      position: absolute;
+      font-size: 28px;
+      font-weight: bold;
+      font-style: italic;
+      text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+      animation: judge-anim 0.3s ease-out forwards;
+      white-space: nowrap;
+      font-family: 'OedoKanteiryu', sans-serif;
+    }
+    @keyframes judge-anim {
+      0% { transform: scale(1.4) translateY(10px); opacity: 1; }
+      50% { transform: scale(1.0) translateY(0px); }
+      100% { transform: scale(0.9) translateY(-15px); opacity: 0; }
+    }
+
+    /* ノーツ共通ベース */
+    .note {
+      position: absolute;
+      top: 9px;
+      width: 82px;
+      height: 82px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+      font-family: 'OedoKanteiryu', sans-serif;
+    }
+    .note-don { background-image: url('gameillust/Don.png'); }
+    .note-ka { background-image: url('gameillust/Ka.png'); }
+    
+    /* 大ドン・大カツ 120%サイズ */
+    .note-big-don {
+      background-image: url('gameillust/Dond.png');
+      width: 91px !important;
+      height: 91px !important;
+      top: 4.5px !important;
+    }
+    .note-big-ka {
+      background-image: url('gameillust/Kad.png');
+      width: 91px !important;
+      height: 91px !important;
+      top: 4.5px !important;
+    }
+
+    /* 風船ノーツ 200%サイズ */
+    .note-balloon {
+      background-image: url('gameillust/Husen.png');
+      width: 120px !important;
+      height: 120px !important;
+      top: -10px !important;
+      color: #ffffff;
+      font-size: 24px;
+      text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+    }
+
+    /* 小連打バー 137%サイズ */
+    .note-renda-bar {
+      position: absolute;
+      top: 15.5px;
+      height: 69px;
+      display: flex;
+      align-items: stretch;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    /* 大連打バー 120%サイズ */
+    .note-renda-thick-bar {
+      position: absolute;
+      top: 10.5px;
+      height: 79px;
+      display: flex;
+      align-items: stretch;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* 小連打パーツ (Re0, Re1, Re2) 200%サイズ */
+    .renda-small-head {
+      width: 44px;
+      height: 100%;
+      background-image: url('gameillust/Re0.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: left center;
+    }
+    .renda-small-body {
+      flex-grow: 1;
+      height: 100%;
+      background-image: url('gameillust/Re1.png');
+      background-repeat: repeat-x;
+      background-position: center;
+      background-size: contain;
+    }
+    .renda-small-tail {
+      width: 44px;
+      height: 100%;
+      background-image: url('gameillust/Re2.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: right center;
+    }
+
+    /* 大連打パーツ (Red0, Red1, Red2) 120% */
+    .renda-big-head {
+      width: 36px;
+      height: 100%;
+      background-image: url('gameillust/Red0.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: left center;
+    }
+    .renda-big-body {
+      flex-grow: 1;
+      height: 100%;
+      background-image: url('gameillust/Red1.png');
+      background-repeat: repeat-x;
+      background-position: center;
+      background-size: contain;
+    }
+    .renda-big-tail {
+      width: 36px;
+      height: 100%;
+      background-image: url('gameillust/Red2.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: right center;
+    }
+
+    .barline {
+      position: absolute; top: 0; width: 2px; height: 100px;
+      background-color: #ffffff; z-index: 0;
+    }
+
+    #taiko-controller-container {
+      position: relative;
+      width: 420px;
+      height: 210px;
+      margin: 20px auto 20px auto;
+      background-image: url('taiko/taiko03.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center bottom;
+      touch-action: manipulation;
+    }
+
+    .touch-zone {
+      position: absolute;
+      cursor: pointer;
+    }
+    #zone-don-left { left: 20%; top: 20%; width: 30%; height: 75%; border-radius: 50% 0 0 50%; }
+    #zone-don-right { left: 50%; top: 20%; width: 30%; height: 75%; border-radius: 0 50% 50% 0; }
+    #zone-ka-left { left: 0; top: 0; width: 35%; height: 100%; }
+    #zone-ka-right { right: 0; top: 0; width: 35%; height: 100%; }
+  </style>
+</head>
+<body>
+
+  <h1>簡易 太鼓の達人 Web</h1>
+
+  <div id="setup-panel">
+    <div class="file-input">
+      <label>1. 楽曲音源 (BGM):</label>
+      <input type="file" id="audio-file">
+    </div>
+    <div class="file-input">
+      <label>2. TJAファイル (.tja):</label>
+      <input type="file" id="tja-file" accept=".tja">
+    </div>
+    <div class="file-input">
+      <label>3. コース選択:</label>
+      <select id="course-select" style="padding: 4px; font-size: 14px; width: 200px;">
+        <option value="">TJAファイルを先に選んでね</option>
+      </select>
+    </div>
+    <div style="margin-top: 10px; text-align: left;">
+      <label><input type="checkbox" id="auto-mode" style="transform: scale(1.2); margin-right: 5px;"> オートプレイにする</label>
+    </div>
+    <button id="start-btn" style="font-size: 18px; padding: 8px 24px; margin-top: 15px; cursor: pointer;">演奏スタート！</button>
+  </div>
+
+  <!-- 成績発表（リザルト画面） -->
+  <div id="result-panel">
+    <h2 style="margin-top: 0; color: #ffd700;">成績発表</h2>
+    <div style="font-size: 18px; margin-bottom: 15px;" id="result-song-title">曲名: </div>
+    <div style="font-size: 22px; font-weight: bold; margin-bottom: 15px; color: #ffaa00;">スコア: <span id="res-score">0</span></div>
+    
+    <div style="font-size: 16px; line-height: 1.8;">
+      <div>・良（ドン・カツ一致）: <span id="res-good" style="color: #ff4747; font-weight: bold;">0</span></div>
+      <div>・可（ズレ有り）: <span id="res-ok" style="color: #47a3ff; font-weight: bold;">0</span></div>
+      <div>・不可（ミス）: <span id="res-miss" style="color: #94a3b8; font-weight: bold;">0</span></div>
+      <div>・連打数（連打・風船）: <span id="res-renda" style="color: #ffaa00; font-weight: bold;">0</span></div>
+      <div>・最大コンボ数: <span id="res-max-combo" style="color: #fde047; font-weight: bold;">0</span></div>
+    </div>
+
+    <button id="retry-btn" style="font-size: 18px; padding: 8px 24px; margin-top: 20px; cursor: pointer; width: 100%;">もう一度プレイする</button>
+  </div>
+
+  <div id="game-container">
+    <div id="top-hud">
+      <div id="don-character"></div>
+      
+      <div id="score-hud">
+        <div id="score-label">スコア</div>
+        <div id="score-number">0</div>
+      </div>
+
+      <div id="mini-taiko-hud">
+        <div id="mini-taiko-container">
+          <div id="mini-taiko-base"></div>
+          <div id="glow-don-left" class="mini-glow glow-left"></div>
+          <div id="glow-don-right" class="mini-glow glow-right"></div>
+          <div id="glow-ka-left" class="mini-glow glow-left"></div>
+          <div id="glow-ka-right" class="mini-glow glow-right"></div>
+        </div>
+        <div id="combo-hud">
+          <div id="combo-number">10</div>
+          <div id="combo-label">コンボ</div>
+        </div>
+      </div>
+
+      <div id="title-hud">
+        <div id="song-title"></div>
+      </div>
+
+      <div id="gauge-container">
+        <div id="gauge-fill"></div>
+        <div id="gauge-text">魂 0%</div>
+      </div>
+    </div>
+
+    <div id="lane">
+      <div id="judge-mark"></div>
+    </div>
+
+    <div id="judge-container"></div>
+
+    <div id="taiko-controller-container">
+      <div id="zone-ka-left" class="touch-zone"></div>
+      <div id="zone-don-left" class="touch-zone"></div>
+      <div id="zone-don-right" class="touch-zone"></div>
+      <div id="zone-ka-right" class="touch-zone"></div>
+    </div>
+  </div>
+
+  <script>
+    let audioContext;
+    let audioBuffer;
+    let audioSource;
+    
+    let dongBuffer = null;
+    let kaBuffer = null;
+    let balloonBuffer = null;
+
+    let comboBuffers = {};
+    const comboMilestones = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400];
+
+    let startTime = 0;
+    let isPlaying = false;
+    let notes = [];
+    let barlines = [];
+    let gogoEvents = [];
+
+    let songTitle = "";
+    let autoIsLeft = true;
+
+    // 成績用変数
+    let statGood = 0;
+    let statOk = 0;
+    let statMiss = 0;
+    let statRenda = 0;
+    let statMaxCombo = 0;
+
+    let charaNormalImages = [];
+    let charaGogoStartImages = [];
+    let charaGogoImages = [];
+    let charaClearInImages = [];
+    let charaClearImages = [];
+    let charaMaxInImages = [];
+    let chara10ComboImages = [];
+    let charaBalloonImages = [];
+    let charaBalloonOkImages = [];
+    let charaBalloonMissImages = [];
+
+    const LANE_JUDGE_X = 230;
+
+    let totalNotesCount = 0;
+    let currentGaugeValue = 0;
+    let currentCombo = 0;
+    let currentScore = 0;
+
+    let scoreInit = 0;
+    let scoreDiff = 0;
+
+    let hasReachedClear = false;
+    let clearInStartTime = 0;
+    let hasReached100 = false;
+    let maxInStartTime = 0;
+
+    let lastComboTriggered = 0;
+    let comboInStartTime = 0;
+
+    let availableCourses = [];
+
+    function getCourseName(courseVal) {
+      const map = {
+        '0': 'かんたん (Easy)', '1': 'ふつう (Normal)', '2': 'むずかしい (Hard)',
+        '3': 'おに (Mania)', '4': 'エディット (Edit)', 'easy': 'かんたん',
+        'normal': 'ふつう', 'hard': 'むずかしい', 'oni': 'おに', 'ura': '裏おに', 'edit': 'エディット'
+      };
+      const lower = String(courseVal).trim().toLowerCase();
+      return map[lower] || `コース: ${courseVal}`;
+    }
+
+    function parseTJA(tjaText, targetCourse) {
+      const lines = tjaText.split(/\r?\n/);
+      let bpm = 120;
+      let offset = 0;
+      let scroll = 1.0;
+      let measureNum = 4;
+      let measureDen = 4;
+      let barlineVisible = true;
+
+      let parsedNotes = [];
+      let parsedBarlines = [];
+      let parsedGogo = [];
+      let currentTime = 0;
+      
+      let currentCourse = '3';
+      let inCourse = false;
+      let isHeader = true;
+      let measureTokens = [];
+      let currentBalloonCount = 5;
+
+      let parsedScoreInit = 0;
+      let parsedScoreDiff = 0;
+      let parsedTitle = "";
+
+      let pendingRendaThin = null;
+      let pendingRendaThick = null;
+      let pendingBalloon = null;
+      let gogoStartTime = null;
+
+      let detectedCoursesSet = new Set();
+
+      function flushMeasure() {
+        if (!inCourse) { measureTokens = []; return; }
+        const tokens = measureTokens;
+        measureTokens = [];
+
+        const measureDuration = (60 / bpm) * 4 * (measureNum / measureDen);
+
+        if (barlineVisible) {
+          parsedBarlines.push({ time: currentTime, bpm: bpm, scroll: scroll });
+        }
+
+        if (tokens.length > 0) {
+          const noteTokens = tokens.filter(t => t.type === 'note');
+          const noteCount = noteTokens.length;
+          const noteDuration = noteCount > 0 ? (measureDuration / noteCount) : 0;
+
+          let noteIndex = 0;
+          let currentBpm = bpm;
+          let currentScroll = scroll;
+
+          for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+
+            if (token.type === 'command') {
+              const cmd = token.command;
+              const val = token.value;
+              if (cmd === 'SCROLL') currentScroll = val;
+              if (cmd === 'BPMCHANGE') currentBpm = val;
+              if (cmd === 'BARLINEOFF') barlineVisible = false;
+              if (cmd === 'BARLINEON') barlineVisible = true;
+              if (cmd === 'GOGOSTART') { if (gogoStartTime === null) gogoStartTime = currentTime; }
+            } else if (token.type === 'note') {
+              const noteTime = currentTime + (noteIndex * noteDuration);
+              noteIndex++;
+
+              const char = token.char;
+              if (char === '1') parsedNotes.push({ time: noteTime, type: 'don', bpm: currentBpm, scroll: currentScroll, hit: false });
+              else if (char === '2') parsedNotes.push({ time: noteTime, type: 'ka', bpm: currentBpm, scroll: currentScroll, hit: false });
+              else if (char === '3') parsedNotes.push({ time: noteTime, type: 'big-don', bpm: currentBpm, scroll: currentScroll, hit: false });
+              else if (char === '4') parsedNotes.push({ time: noteTime, type: 'big-ka', bpm: currentBpm, scroll: currentScroll, hit: false });
+              else if (char === '5') pendingRendaThin = { startTime: noteTime, bpm: currentBpm, scroll: currentScroll };
+              else if (char === '6') pendingRendaThick = { startTime: noteTime, bpm: currentBpm, scroll: currentScroll };
+              else if (char === '7') pendingBalloon = { startTime: noteTime, bpm: currentBpm, scroll: currentScroll, count: currentBalloonCount };
+              else if (char === '8') {
+                if (pendingRendaThin) {
+                  parsedNotes.push({ type: 'renda-thin', startTime: pendingRendaThin.startTime, endTime: noteTime, bpm: pendingRendaThin.bpm, scroll: pendingRendaThin.scroll, hit: false });
+                  pendingRendaThin = null;
+                } else if (pendingRendaThick) {
+                  parsedNotes.push({ type: 'renda-thick', startTime: pendingRendaThick.startTime, endTime: noteTime, bpm: pendingRendaThick.bpm, scroll: pendingRendaThick.scroll, hit: false });
+                  pendingRendaThick = null;
+                } else if (pendingBalloon) {
+                  parsedNotes.push({ type: 'balloon', startTime: pendingBalloon.startTime, endTime: noteTime, bpm: pendingBalloon.bpm, scroll: pendingBalloon.scroll, hit: false, count: pendingBalloon.count, maxCount: pendingBalloon.count, status: 'active', resultTime: 0 });
+                  pendingBalloon = null;
+                }
+              }
+            }
+          }
+        }
+        currentTime += measureDuration;
+      }
+
+      for (let rawLine of lines) {
+        let line = rawLine.trim();
+        if (!line || line.startsWith('//')) continue;
+        const commentIdx = line.indexOf('//');
+        if (commentIdx !== -1) line = line.substring(0, commentIdx).trim();
+
+        if (line.toUpperCase().startsWith('TITLE:')) {
+          parsedTitle = line.substring(6).trim();
+          continue;
+        }
+
+        if (line.toUpperCase().startsWith('COURSE:')) {
+          currentCourse = line.split(':')[1].trim();
+          detectedCoursesSet.add(currentCourse);
+          continue;
+        }
+        if (line.toUpperCase().startsWith('#COURSE')) {
+          const parts = line.split(/\s+/);
+          if (parts[1]) { currentCourse = parts[1].trim(); detectedCoursesSet.add(currentCourse); }
+          continue;
+        }
+
+        if (line === '#START') {
+          isHeader = false;
+          inCourse = (targetCourse === undefined || currentCourse === targetCourse);
+          continue;
+        }
+
+        if (line === '#END') {
+          if (inCourse) {
+            if (measureTokens.length > 0) flushMeasure();
+            if (gogoStartTime !== null) { parsedGogo.push({ start: gogoStartTime, end: currentTime }); gogoStartTime = null; }
+          }
+          inCourse = false; isHeader = true; continue;
+        }
+
+        if (isHeader) {
+          if (line.startsWith('BPM:')) bpm = parseFloat(line.split(':')[1]);
+          else if (line.startsWith('OFFSET:')) { offset = parseFloat(line.split(':')[1]); currentTime = -offset; }
+          else if (line.startsWith('BALLOON:')) {
+            const bParts = line.split(':')[1].split(',');
+            if (bParts.length > 0 && !isNaN(bParts[0])) currentBalloonCount = parseInt(bParts[0]);
+          }
+          else if (line.startsWith('SCOREINIT:')) parsedScoreInit = parseInt(line.split(':')[1]);
+          else if (line.startsWith('SCOREDIFF:')) parsedScoreDiff = parseInt(line.split(':')[1]);
+        } else if (inCourse) {
+          if (line.startsWith('#')) {
+            const upperLine = line.toUpperCase();
+            if (upperLine.startsWith('#SCROLL')) { const parts = line.split(/\s+/); if (parts[1]) scroll = parseFloat(parts[1]); }
+            else if (upperLine.startsWith('#BPMCHANGE')) { const parts = line.split(/\s+/); if (parts[1]) bpm = parseFloat(parts[1]); }
+            else if (upperLine.startsWith('#MEASURE')) {
+              const parts = line.split(/\s+/)[1].split('/');
+              if (parts.length === 2) { measureNum = parseInt(parts[0]); measureDen = parseInt(parts[1]); }
+            }
+            else if (upperLine === '#BARLINEOFF') barlineVisible = false;
+            else if (upperLine === '#BARLINEON') barlineVisible = true;
+            else if (upperLine === '#GOGOSTART') { if (gogoStartTime === null) gogoStartTime = currentTime; }
+            else if (upperLine === '#GOGOEND') { if (gogoStartTime !== null) { parsedGogo.push({ start: gogoStartTime, end: currentTime }); gogoStartTime = null; } }
+            continue;
+          }
+
+          let i = 0;
+          while (i < line.length) {
+            if (line[i] === ',') { flushMeasure(); i++; }
+            else if (line[i] === '#') {
+              let cmdEnd = i + 1;
+              while (cmdEnd < line.length && !/\s/.test(line[cmdEnd]) && line[cmdEnd] !== ',') cmdEnd++;
+              const cmdName = line.substring(i + 1, cmdEnd).toUpperCase();
+              let val = null;
+              while (cmdEnd < line.length && /\s/.test(line[cmdEnd])) cmdEnd++;
+              let valStart = cmdEnd;
+              while (cmdEnd < line.length && !/\s/.test(line[cmdEnd]) && line[cmdEnd] !== ',') cmdEnd++;
+              if (cmdEnd > valStart) val = parseFloat(line.substring(valStart, cmdEnd));
+
+              if (cmdName.startsWith('SCROLL')) { scroll = val !== null ? val : scroll; measureTokens.push({ type: 'command', command: 'SCROLL', value: scroll }); }
+              else if (cmdName.startsWith('BPMCHANGE')) { bpm = val !== null ? val : bpm; measureTokens.push({ type: 'command', command: 'BPMCHANGE', value: bpm }); }
+              else if (cmdName === 'BARLINEOFF') { barlineVisible = false; measureTokens.push({ type: 'command', command: 'BARLINEOFF' }); }
+              else if (cmdName === 'BARLINEON') { barlineVisible = true; measureTokens.push({ type: 'command', command: 'BARLINEON' }); }
+              else if (cmdName === 'GOGOSTART') { if (gogoStartTime === null) gogoStartTime = currentTime; measureTokens.push({ type: 'command', command: 'GOGOSTART' }); }
+              else if (cmdName === 'GOGOEND') { if (gogoStartTime !== null) { parsedGogo.push({ start: gogoStartTime, end: currentTime }); gogoStartTime = null; } measureTokens.push({ type: 'command', command: 'GOGOEND' }); }
+              i = cmdEnd;
+            } else if (!/\s/.test(line[i])) {
+              measureTokens.push({ type: 'note', char: line[i] });
+              i++;
+            } else { i++; }
+          }
+        }
+      }
+
+      const leadInTime = 1.0;
+      parsedNotes.forEach(n => {
+        n.time = (n.time || 0) + leadInTime;
+        if (n.startTime !== undefined) n.startTime += leadInTime;
+        if (n.endTime !== undefined) n.endTime += leadInTime;
+      });
+      parsedBarlines.forEach(b => {
+        b.time += leadInTime;
+      });
+      parsedGogo.forEach(g => {
+        g.start += leadInTime;
+        g.end += leadInTime;
+      });
+
+      parsedNotes.sort((a, b) => (a.startTime || a.time) - (b.startTime || b.time));
+      return { notes: parsedNotes, barlines: parsedBarlines, gogo: parsedGogo, bpm: bpm, title: parsedTitle, scoreInit: parsedScoreInit, scoreDiff: parsedScoreDiff, detectedCourses: Array.from(detectedCoursesSet) };
+    }
+
+    document.getElementById('tja-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const result = parseTJA(text, undefined);
+
+      availableCourses = result.detectedCourses;
+      const selectElem = document.getElementById('course-select');
+      selectElem.innerHTML = '';
+      if (availableCourses.length === 0) availableCourses.push('3');
+
+      availableCourses.forEach(course => {
+        const opt = document.createElement('option');
+        opt.value = course; opt.innerText = getCourseName(course);
+        selectElem.appendChild(opt);
+      });
+    });
+
+    async function loadSound(filename) {
+      try {
+        const response = await fetch(filename);
+        if (!response.ok) return null;
+        const arrayBuffer = await response.arrayBuffer();
+        return await audioContext.decodeAudioData(arrayBuffer);
+      } catch (e) { return null; }
+    }
+
+    async function loadImages(folder, count) {
+      let images = [];
+      for (let i = 0; i <= count; i++) {
+        let img = new Image(); img.src = `${folder}/${i}.png`; images.push(img);
+      }
+      return images;
+    }
+
+    async function preloadGameIllustrations() {
+      const imageNames = ['Hantei', 'Don', 'Ka', 'Dond', 'Kad', 'Re0', 'Re1', 'Re2', 'Red0', 'Red1', 'Red2', 'Husen'];
+      const promises = imageNames.map(name => {
+        return new Promise((resolve) => {
+          let img = new Image();
+          img.src = `gameillust/${name}.png`;
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      });
+      await Promise.all(promises);
+    }
+
+    async function preloadAllCharacters() {
+      const loadPromises = [
+        preloadGameIllustrations(),
+        loadImages('chara/normal', 118).then(imgs => charaNormalImages = imgs),
+        loadImages('chara/gogostart', 52).then(imgs => charaGogoStartImages = imgs),
+        loadImages('chara/gogo', 117).then(imgs => charaGogoImages = imgs),
+        loadImages('chara/clearin', 43).then(imgs => charaClearInImages = imgs),
+        loadImages('chara/clear', 58).then(imgs => charaClearImages = imgs),
+        loadImages('chara/maxin', 68).then(imgs => charaMaxInImages = imgs),
+        loadImages('chara/10combo', 43).then(imgs => chara10ComboImages = imgs),
+        loadImages('chara/balloon', 10).then(imgs => charaBalloonImages = imgs),
+        loadImages('chara/balloonok', 30).then(imgs => charaBalloonOkImages = imgs),
+        loadImages('chara/balloonmiss', 23).then(imgs => charaBalloonMissImages = imgs)
+      ];
+      await Promise.all(loadPromises);
+    }
+
+    async function preloadComboSounds() {
+      for (let count of comboMilestones) {
+        comboBuffers[count] = await loadSound(`combo/${count}.mp3`);
+      }
+    }
+
+    function playComboSound(count) {
+      if (!audioContext || !comboBuffers[count]) return;
+      const source = audioContext.createBufferSource();
+      source.buffer = comboBuffers[count];
+      source.connect(audioContext.destination);
+      source.start(0);
+    }
+
+    function playBalloonSound() {
+      if (!audioContext || !balloonBuffer) return;
+      const source = audioContext.createBufferSource();
+      source.buffer = balloonBuffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+    }
+
+    let lastSoundTime = 0;
+    function playSound(type) {
+      if (!audioContext) return;
+      let buffer = (type.includes('don')) ? dongBuffer : kaBuffer;
+      if (!buffer) return;
+
+      const now = audioContext.currentTime;
+      if (type.includes('don') && now - lastSoundTime < 0.03) return;
+      if (type.includes('don')) lastSoundTime = now;
+
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+
+      triggerMiniTaikoFlash(type);
+    }
+
+    function triggerMiniTaikoFlash(type) {
+      let targetElem = null;
+      if (type === 'don-left') targetElem = document.getElementById('glow-don-left');
+      else if (type === 'don-right') targetElem = document.getElementById('glow-don-right');
+      else if (type === 'ka-left') targetElem = document.getElementById('glow-ka-left');
+      else if (type === 'ka-right') targetElem = document.getElementById('glow-ka-right');
+
+      if (targetElem) {
+        if (targetElem.fadeTimeout) clearTimeout(targetElem.fadeTimeout);
+        targetElem.classList.add('glow-active');
+        targetElem.fadeTimeout = setTimeout(() => {
+          targetElem.classList.remove('glow-active');
+        }, 80);
+      }
+    }
+
+    function updateComboHud() {
+      const comboHud = document.getElementById('combo-hud');
+      const comboNumElem = document.getElementById('combo-number');
+      if (!comboHud || !comboNumElem) return;
+
+      if (currentCombo >= 10) {
+        comboHud.style.display = 'flex';
+        comboNumElem.innerText = currentCombo;
+        comboNumElem.classList.remove('combo-silver', 'combo-gold');
+        if (currentCombo >= 100) comboNumElem.classList.add('combo-gold');
+        else if (currentCombo >= 50) comboNumElem.classList.add('combo-silver');
+      } else {
+        comboHud.style.display = 'none';
+      }
+    }
+
+    function updateScoreHud() {
+      const scoreNumElem = document.getElementById('score-number');
+      if (scoreNumElem) scoreNumElem.innerText = currentScore;
+    }
+
+    function addScore(type) {
+      let baseScore = (scoreInit > 0) ? (scoreInit + (scoreDiff > 0 ? scoreDiff * Math.min(currentCombo, 200) : 0)) : 1000;
+      if (type === 'good') currentScore += baseScore;
+      else if (type === 'ok') currentScore += Math.floor(baseScore / 2);
+      else if (type === 'renda' || type === 'balloon') currentScore += 100;
+      updateScoreHud();
+    }
+
+    function showJudgePopup(text, color) {
+      const container = document.getElementById('judge-container');
+      const popup = document.createElement('div');
+      popup.className = 'judge-popup'; popup.innerText = text; popup.style.color = color;
+      container.innerHTML = ''; container.appendChild(popup);
+      setTimeout(() => popup.remove(), 300);
+    }
+
+    function recordHitStats(judgeType) {
+      if (judgeType === 'good') {
+        statGood++;
+        currentCombo++;
+        statMaxCombo = Math.max(statMaxCombo, currentCombo);
+        updateComboHud();
+        addScore('good');
+        if (comboMilestones.includes(currentCombo)) playComboSound(currentCombo);
+        updateComboMilestoneTimer();
+      } else if (judgeType === 'ok') {
+        statOk++;
+        currentCombo++;
+        statMaxCombo = Math.max(statMaxCombo, currentCombo);
+        updateComboHud();
+        addScore('ok');
+        if (comboMilestones.includes(currentCombo)) playComboSound(currentCombo);
+        updateComboMilestoneTimer();
+      } else if (judgeType === 'miss') {
+        statMiss++;
+        currentCombo = 0;
+        updateComboHud();
+      }
+    }
+
+    function updateComboMilestoneTimer() {
+      if (currentCombo > 0 && currentCombo % 10 === 0 && currentCombo !== lastComboTriggered) {
+        let inGogo = false;
+        const elapsedTime = audioContext.currentTime - startTime;
+        for (let gogo of gogoEvents) {
+          if (elapsedTime >= gogo.start && elapsedTime < gogo.end) { inGogo = true; break; }
+        }
+        if (!inGogo) { lastComboTriggered = currentCombo; comboInStartTime = elapsedTime; }
+      }
+    }
+
+    function updateGauge(type) {
+      if (totalNotesCount <= 0) return;
+      const goodAdd = (100 / totalNotesCount) * (100 / 80);
+      const okAdd = goodAdd * 0.5;
+
+      recordHitStats(type);
+
+      const addValue = (type === 'good') ? goodAdd : (type === 'ok') ? okAdd : 0;
+      const prevValue = currentGaugeValue;
+      currentGaugeValue = Math.min(100, currentGaugeValue + addValue);
+
+      if (prevValue < 80 && currentGaugeValue >= 80 && !hasReachedClear) {
+        hasReachedClear = true; clearInStartTime = audioContext.currentTime - startTime;
+      }
+      if (prevValue < 100 && currentGaugeValue >= 100 && !hasReached100) {
+        hasReached100 = true; maxInStartTime = audioContext.currentTime - startTime;
+      }
+
+      const fill = document.getElementById('gauge-fill');
+      const text = document.getElementById('gauge-text');
+      const percent = Math.floor(currentGaugeValue);
+      fill.style.width = `${percent}%`; text.innerText = `魂 ${percent}%`;
+    }
+
+    function showResult() {
+      isPlaying = false;
+      document.getElementById('game-container').style.display = 'none';
+
+      document.getElementById('result-song-title').innerText = `曲名: ${songTitle || '不明'}`;
+      document.getElementById('res-score').innerText = currentScore;
+      document.getElementById('res-good').innerText = statGood;
+      document.getElementById('res-ok').innerText = statOk;
+      document.getElementById('res-miss').innerText = statMiss;
+      document.getElementById('res-renda').innerText = statRenda;
+      document.getElementById('res-max-combo').innerText = statMaxCombo;
+
+      document.getElementById('result-panel').style.display = 'block';
+    }
+
+    document.getElementById('retry-btn').addEventListener('click', () => {
+      document.getElementById('result-panel').style.display = 'none';
+      document.getElementById('setup-panel').style.display = 'block';
+    });
+
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      const audioInput = document.getElementById('audio-file').files[0];
+      const tjaInput = document.getElementById('tja-file').files[0];
+      const selectedCourse = document.getElementById('course-select').value;
+
+      if (!audioInput || !tjaInput) { alert('楽曲音源とTJAファイルは選択してね！'); return; }
+
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioData = await audioInput.arrayBuffer();
+      audioBuffer = await audioContext.decodeAudioData(audioData);
+
+      dongBuffer = await loadSound('dong.wav');
+      kaBuffer = await loadSound('ka.wav');
+      balloonBuffer = await loadSound('balloon.wav');
+
+      await preloadAllCharacters();
+      await preloadComboSounds();
+
+      const tjaText = await tjaInput.text();
+      const parsedData = parseTJA(tjaText, selectedCourse);
+      notes = parsedData.notes; barlines = parsedData.barlines; gogoEvents = parsedData.gogo;
+      scoreInit = parsedData.scoreInit; scoreDiff = parsedData.scoreDiff;
+      songTitle = parsedData.title;
+
+      document.getElementById('song-title').innerText = songTitle;
+
+      if (notes.length === 0) { alert('選択したコースの譜面データが見つかりませんでした！'); return; }
+
+      totalNotesCount = notes.filter(n => n.type === 'don' || n.type === 'ka' || n.type === 'big-don' || n.type === 'big-ka').length;
+      currentGaugeValue = 0; currentCombo = 0; currentScore = 0;
+      statGood = 0; statOk = 0; statMiss = 0; statRenda = 0; statMaxCombo = 0;
+
+      updateComboHud(); updateScoreHud();
+      lastComboTriggered = 0; hasReachedClear = false; hasReached100 = false;
+      autoIsLeft = true;
+      updateGauge('none');
+
+      document.getElementById('setup-panel').style.display = 'none';
+      document.getElementById('result-panel').style.display = 'none';
+      document.getElementById('game-container').style.display = 'block';
+
+      const lane = document.getElementById('lane');
+      document.querySelectorAll('.note, .note-renda-bar, .note-renda-thick-bar, .barline').forEach(e => e.remove());
+
+      barlines.forEach(bar => {
+        const div = document.createElement('div'); div.className = 'barline';
+        lane.appendChild(div); bar.element = div;
+      });
+
+      notes.forEach((note, index) => {
+        const div = document.createElement('div');
+        if (note.type === 'don' || note.type === 'ka') div.className = `note note-${note.type}`;
+        else if (note.type === 'big-don') div.className = `note note-big-don`;
+        else if (note.type === 'big-ka') div.className = `note note-big-ka`;
+        else if (note.type === 'renda-thin') {
+          div.className = `note-renda-bar`;
+          div.innerHTML = `<div class="renda-small-head"></div><div class="renda-small-body"></div><div class="renda-small-tail"></div>`;
+        }
+        else if (note.type === 'renda-thick') {
+          div.className = `note-renda-thick-bar`;
+          div.innerHTML = `<div class="renda-big-head"></div><div class="renda-big-body"></div><div class="renda-big-tail"></div>`;
+        }
+        else if (note.type === 'balloon') {
+          div.className = `note note-balloon`;
+          div.innerText = note.count;
+        }
+        
+        div.style.zIndex = notes.length - index;
+        lane.appendChild(div); note.element = div;
+      });
+
+      audioSource = audioContext.createBufferSource();
+      audioSource.buffer = audioBuffer;
+      audioSource.connect(audioContext.destination);
+
+      audioSource.onended = () => {
+        if (isPlaying) showResult();
+      };
+
+      startTime = audioContext.currentTime;
+      audioSource.start(startTime + 1.0);
+      isPlaying = true;
+
+      requestAnimationFrame(gameLoop);
+    });
+
+    function gameLoop() {
+      if (!isPlaying) return;
+      const elapsedTime = audioContext.currentTime - startTime;
+      const isAuto = document.getElementById('auto-mode').checked;
+
+      updateDonAnimation(elapsedTime);
+
+      barlines.forEach(bar => {
+        const timeDiff = bar.time - elapsedTime;
+        const speed = (bar.bpm / 120) * bar.scroll * 350;
+        const x = LANE_JUDGE_X + (timeDiff * speed);
+        if (x < -20 || x > 850) bar.element.style.display = 'none';
+        else { bar.element.style.display = 'block'; bar.element.style.left = `${x}px`; }
+      });
+
+      notes.forEach(note => {
+        if (note.hit) return;
+        const speed = (note.bpm / 120) * note.scroll * 350;
+
+        if (note.type === 'don' || note.type === 'ka' || note.type === 'big-don' || note.type === 'big-ka') {
+          if (!isAuto && elapsedTime > note.time + 0.15) {
+            note.hit = true; note.element.style.display = 'none';
+            showJudgePopup('不可', '#4a90e2'); updateGauge('miss'); return;
+          }
+          if (isAuto && elapsedTime >= note.time) {
+            note.hit = true; note.element.style.display = 'none';
+            
+            let hitType = '';
+            if (note.type.includes('ka')) {
+              hitType = autoIsLeft ? 'ka-left' : 'ka-right';
+            } else {
+              hitType = autoIsLeft ? 'don-left' : 'don-right';
+            }
+            autoIsLeft = !autoIsLeft;
+
+            playSound(hitType);
+            showJudgePopup('良', '#ff2200'); updateGauge('good'); return;
+          }
+          const timeDiff = note.time - elapsedTime;
+          const x = LANE_JUDGE_X + (timeDiff * speed);
+          if (x < -80) note.element.style.display = 'none';
+          else { note.element.style.display = 'flex'; note.element.style.left = `${x}px`; }
+
+        } else if (note.type === 'renda-thin' || note.type === 'renda-thick') {
+          if (elapsedTime > note.endTime) { note.hit = true; note.element.style.display = 'none'; return; }
+          const startX = LANE_JUDGE_X + ((note.startTime - elapsedTime) * speed);
+          const endX = LANE_JUDGE_X + ((note.endTime - elapsedTime) * speed);
+          note.element.style.display = 'flex'; note.element.style.left = `${startX}px`;
+          note.element.style.width = `${Math.max(30, endX - startX)}px`;
+
+          if (isAuto && elapsedTime >= note.startTime && elapsedTime <= note.endTime) {
+            if (Math.random() < 0.3) { 
+              const hitType = autoIsLeft ? 'don-left' : 'don-right';
+              autoIsLeft = !autoIsLeft;
+              playSound(hitType); addScore('renda'); statRenda++;
+            }
+          }
+        } else if (note.type === 'balloon') {
+          if (note.status === 'ok' || elapsedTime > note.endTime) {
+            if (note.status === 'active') { note.status = 'miss'; note.resultTime = elapsedTime; }
+            note.hit = true; 
+            note.element.style.display = 'none';
+            return;
+          }
+
+          let x = (elapsedTime < note.startTime) ? LANE_JUDGE_X + ((note.startTime - elapsedTime) * speed) : LANE_JUDGE_X;
+          note.element.style.display = 'flex'; note.element.style.left = `${x}px`;
+
+          if (isAuto && elapsedTime >= note.startTime && note.status === 'active') {
+            if (Math.random() < 0.4) {
+              const hitType = autoIsLeft ? 'don-left' : 'don-right';
+              autoIsLeft = !autoIsLeft;
+              playSound(hitType); note.count--; note.element.innerText = note.count; addScore('balloon'); statRenda++;
+              if (note.count <= 0) { 
+                note.status = 'ok'; 
+                note.resultTime = elapsedTime; 
+                note.hit = true; 
+                note.element.style.display = 'none';
+                playBalloonSound();
+              }
+            }
+          }
+        }
+      });
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function updateDonAnimation(elapsedTime) {
+      const donElem = document.getElementById('don-character');
+      if (!donElem) return;
+
+      let currentBpm = 120;
+      const currentNote = notes.find(n => (n.time || n.startTime) >= elapsedTime);
+      if (currentNote && currentNote.bpm) currentBpm = currentNote.bpm;
+
+      const beatDuration = 60 / currentBpm;
+      const animCycleTime = beatDuration * 4; 
+      const clearAnimCycleTime = beatDuration * 2; 
+
+      const activeBalloon = notes.find(n => n.type === 'balloon' && elapsedTime >= n.startTime && elapsedTime <= (n.resultTime ? n.resultTime + 1.2 : n.endTime + 0.8));
+      
+      if (activeBalloon && activeBalloon.status === 'active' && elapsedTime >= activeBalloon.startTime) {
+        donElem.style.left = `${LANE_JUDGE_X - 140}px`; donElem.style.bottom = `-95px`;
+        if (charaBalloonImages.length > 0) {
+          const balloonElapsed = elapsedTime - activeBalloon.startTime;
+          const frameIndex = Math.floor((balloonElapsed % 0.5) / 0.5 * charaBalloonImages.length);
+          donElem.style.backgroundImage = `url(${charaBalloonImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (activeBalloon && activeBalloon.status === 'ok') {
+        donElem.style.left = `${LANE_JUDGE_X - 140}px`; donElem.style.bottom = `-95px`;
+        const timeSinceOk = elapsedTime - activeBalloon.resultTime;
+        const okDuration = beatDuration * 1.5;
+        if (timeSinceOk < okDuration && charaBalloonOkImages.length > 0) {
+          const progress = timeSinceOk / okDuration;
+          const frameIndex = Math.min(Math.floor(progress * charaBalloonOkImages.length), charaBalloonOkImages.length - 1);
+          donElem.style.backgroundImage = `url(${charaBalloonOkImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (activeBalloon && activeBalloon.status === 'miss') {
+        donElem.style.left = `${LANE_JUDGE_X - 140}px`; donElem.style.bottom = `-95px`;
+        const timeSinceMiss = elapsedTime - activeBalloon.resultTime;
+        const missDuration = beatDuration * 1.5;
+        if (timeSinceMiss < missDuration && charaBalloonMissImages.length > 0) {
+          const progress = timeSinceMiss / missDuration;
+          const frameIndex = Math.min(Math.floor(progress * charaBalloonMissImages.length), charaBalloonMissImages.length - 1);
+          donElem.style.backgroundImage = `url(${charaBalloonMissImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      donElem.style.left = `-20px`; donElem.style.bottom = `5px`;
+
+      if (hasReached100) {
+        const timeSinceMaxIn = elapsedTime - maxInStartTime;
+        const maxInDuration = beatDuration * 1.5;
+        if (timeSinceMaxIn < maxInDuration && charaMaxInImages.length > 0) {
+          const progress = timeSinceMaxIn / maxInDuration;
+          const frameIndex = Math.min(Math.floor(progress * charaMaxInImages.length), charaMaxInImages.length - 1);
+          donElem.style.backgroundImage = `url(${charaMaxInImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (hasReachedClear) {
+        const timeSinceClearIn = elapsedTime - clearInStartTime;
+        const clearInDuration = beatDuration * 1.5;
+        if (timeSinceClearIn < clearInDuration && charaClearInImages.length > 0) {
+          const progress = timeSinceClearIn / clearInDuration;
+          const frameIndex = Math.min(Math.floor(progress * charaClearInImages.length), charaClearInImages.length - 1);
+          donElem.style.backgroundImage = `url(${charaClearInImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (comboInStartTime > 0 && chara10ComboImages.length > 0) {
+        const timeSinceComboIn = elapsedTime - comboInStartTime;
+        const comboInDuration = beatDuration * 1.5;
+        if (timeSinceComboIn < comboInDuration) {
+          const progress = timeSinceComboIn / comboInDuration;
+          const frameIndex = Math.min(Math.floor(progress * chara10ComboImages.length), chara10ComboImages.length - 1);
+          donElem.style.backgroundImage = `url(${chara10ComboImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      let inGogo = false; let activeGogo = null;
+      for (let gogo of gogoEvents) {
+        if (elapsedTime >= gogo.start && elapsedTime < gogo.end) { inGogo = true; activeGogo = gogo; break; }
+      }
+
+      if (inGogo) {
+        const timeSinceGogoStart = elapsedTime - activeGogo.start;
+        const gogoStartDuration = beatDuration * 1.5;
+        if (timeSinceGogoStart < gogoStartDuration && charaGogoStartImages.length > 0) {
+          const progress = timeSinceGogoStart / gogoStartDuration;
+          const frameIndex = Math.min(Math.floor(progress * charaGogoStartImages.length), charaGogoStartImages.length - 1);
+          donElem.style.backgroundImage = `url(${charaGogoStartImages[frameIndex].src})`;
+          return;
+        } else if (charaGogoImages.length > 0) {
+          const gogoElapsed = timeSinceGogoStart - gogoStartDuration;
+          const frameIndex = Math.floor((gogoElapsed % animCycleTime) / animCycleTime * charaGogoImages.length);
+          donElem.style.backgroundImage = `url(${charaGogoImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (hasReached100 || hasReachedClear) {
+        if (charaClearImages.length > 0) {
+          const refTime = hasReached100 ? (maxInStartTime + (beatDuration * 1.5)) : (clearInStartTime + (beatDuration * 1.5));
+          const clearElapsed = elapsedTime - refTime;
+          const frameIndex = Math.floor((clearElapsed % clearAnimCycleTime) / clearAnimCycleTime * charaClearImages.length);
+          donElem.style.backgroundImage = `url(${charaClearImages[frameIndex].src})`;
+          return;
+        }
+      }
+
+      if (charaNormalImages.length > 0) {
+        const frameIndex = Math.floor((elapsedTime % animCycleTime) / animCycleTime * charaNormalImages.length);
+        donElem.style.backgroundImage = `url(${charaNormalImages[frameIndex].src})`;
+      }
+    }
+
+    function handleHit(hitDetailType) {
+      if (!isPlaying || document.getElementById('auto-mode').checked) return;
+
+      const currentTime = audioContext.currentTime - startTime;
+      const isKa = hitDetailType.includes('ka');
+
+      const activeBalloon = notes.find(n => !n.hit && n.type === 'balloon' && n.status === 'active' && currentTime >= n.startTime && currentTime <= n.endTime);
+      if (activeBalloon) {
+        playSound(hitDetailType); activeBalloon.count--; activeBalloon.element.innerText = activeBalloon.count;
+        showJudgePopup('連', '#ff88ff'); addScore('balloon'); statRenda++;
+        if (activeBalloon.count <= 0) { 
+          activeBalloon.status = 'ok'; 
+          activeBalloon.resultTime = currentTime; 
+          activeBalloon.hit = true; 
+          activeBalloon.element.style.display = 'none';
+          playBalloonSound();
+        }
+        return;
+      }
+
+      const activeRenda = notes.find(n => !n.hit && (n.type === 'renda-thin' || n.type === 'renda-thick') && currentTime >= n.startTime && currentTime <= n.endTime);
+      if (activeRenda) {
+        playSound(hitDetailType); showJudgePopup('打', '#ffa500'); addScore('renda'); statRenda++; return;
+      }
+
+      // ドンとカツを完全に分けて、対応するノーツのみから一番近いものを探す（不可判定の幅も0.20秒に少し小さく調整）
+      const targetNote = notes.find(n => {
+        if (n.hit) return false;
+        if (n.type !== 'don' && n.type !== 'ka' && n.type !== 'big-don' && n.type !== 'big-ka') return false;
+
+        const noteIsKa = n.type.includes('ka');
+        if (noteIsKa !== isKa) return false; // 種類が違うものは対象外（独立判定）
+
+        return Math.abs(n.time - currentTime) < 0.20;
+      });
+
+      if (targetNote) {
+        const diff = targetNote.time - currentTime; // 正：早い、負：遅い
+        const absDiff = Math.abs(diff);
+
+        targetNote.hit = true; 
+        targetNote.element.style.display = 'none';
+        playSound(hitDetailType);
+
+        if (absDiff <= 0.05) { 
+          showJudgePopup('良', '#ff2200'); 
+          recordHitStats('good'); 
+        } else if (absDiff <= 0.15) { 
+          showJudgePopup('可', '#00aa00'); 
+          recordHitStats('ok'); 
+        } else { 
+          showJudgePopup('不可', '#4a90e2'); 
+          recordHitStats('miss'); 
+        }
+      } else {
+        playSound(hitDetailType);
+      }
+    }
+
+    // タッチ操作
+    document.getElementById('zone-don-left').addEventListener('pointerdown', (e) => { e.stopPropagation(); handleHit('don-left'); });
+    document.getElementById('zone-don-right').addEventListener('pointerdown', (e) => { e.stopPropagation(); handleHit('don-right'); });
+    document.getElementById('zone-ka-left').addEventListener('pointerdown', (e) => { e.stopPropagation(); handleHit('ka-left'); });
+    document.getElementById('zone-ka-right').addEventListener('pointerdown', (e) => { e.stopPropagation(); handleHit('ka-right'); });
+
+    // キーボード8キー設定 (F/V:ドン左, J/N:ドン右, D/C:カツ左, K/M:カツ右)
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      const key = e.key.toLowerCase();
+      if (key === 'f' || key === 'v') { handleHit('don-left'); e.preventDefault(); }
+      else if (key === 'j' || key === 'n') { handleHit('don-right'); e.preventDefault(); }
+      else if (key === 'd' || key === 'c') { handleHit('ka-left'); e.preventDefault(); }
+      else if (key === 'k' || key === 'm') { handleHit('ka-right'); e.preventDefault(); }
+    });
+  </script>
+</body>
+</html>
